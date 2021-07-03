@@ -25,13 +25,13 @@ app.get("/api/dic/:word", async (req, res, next) => {
     }
     else {
       msg = "success";
-      let arr = [];
+      var arr = [];
       el.querySelectorAll('.rekhtaDicSrchWord').forEach((e, i) => {
 
-        let en = e.querySelector('.dicSrchWord').innerText;
-        let hiUr = e.querySelector('.dicSrchMnng').innerText;
-        let enMeaning = e.querySelectorAll('p.dicSrchWrdSyno')[0].innerText;
-        let hiMeaning = "";
+        var en = e.querySelector('.dicSrchWord').innerText;
+        var hiUr = e.querySelector('.dicSrchMnng').innerText;
+        var enMeaning = e.querySelectorAll('p.dicSrchWrdSyno')[0].innerText;
+        var hiMeaning = "";
         if (e.querySelectorAll('p.dicSrchWrdSyno')[1])
           hiMeaning = e.querySelectorAll('p.dicSrchWrdSyno')[1].innerText;
         arr[i] = { en, hiUr, enMeaning, hiMeaning };
@@ -52,27 +52,29 @@ app.get("/api/dic/:word", async (req, res, next) => {
     })
   }
 });
-app.get("/api/dic2/:method/:word&:lang&:id", async (req, res, next) => {
+app.get("/api/dic2", async (req, res, next) => {
   try {
-    var word = req.params.word;
-    var lang = req.params.lang;
-    var method = req.params.method;
-    var id = req.params.id;
+    var method = req.query.method;
+    var word = req.query.word;
+    var lang = req.query.lang;
+    var id = req.query.id;
     var baseurl = '';
     console.table({ word, lang, method, id });
     switch (method) {
-      case 'briefMeaning':
-        baseurl = 'https://rekhtadictionary.com/search?keyword=';
-        break;
-
-      case 'compound':
-        baseurl = `https://rekhtadictionary.com/compound-words-containing-${id}?keyword=`;
-        break;
       case 'getWords':
         baseurl = 'https://rekhtadictionary.com/GetWordsSuggestions?q=';
         break;
+      case 'briefMeaning':
+        baseurl = 'https://rekhtadictionary.com/search?keyword=';
+        break;
+      case 'compound':
+        baseurl = `https://rekhtadictionary.com/compound-words-containing-${id}?keyword=`;
+        break;
       case 'idiom':
         baseurl = `https://rekhtadictionary.com/idioms-containing-${id}?keyword=`;
+        break;
+      case 'detail':
+        baseurl = `https://rekhtadictionary.com/meaning-of-${id}?`;
         break;
 
       default:
@@ -84,7 +86,11 @@ app.get("/api/dic2/:method/:word&:lang&:id", async (req, res, next) => {
     var data;
     console.log(url);
     const response = await fetch(url);
-    if (method == 'getWords') { console.log("Executing getWords"); var temp = await response.json(); data = JSON.stringify(temp); }
+    if (method == 'getWords') {
+      msg = "success";
+      data = await response.json();
+      // data = JSON.stringify(temp); 
+    }
     else {
       console.log("Executing else of getWords. Method:" + method);
       const text = await response.text();
@@ -92,7 +98,7 @@ app.get("/api/dic2/:method/:word&:lang&:id", async (req, res, next) => {
       msg = "success";
       switch (method) {
         case 'briefMeaning':
-          let meanings = []
+          var meanings = []
           var el = document.querySelector('.rdSrchResultCrdListng');
           if (el == null) {
             msg = "failed"
@@ -106,39 +112,54 @@ app.get("/api/dic2/:method/:word&:lang&:id", async (req, res, next) => {
           });
           data = meanings;
           break;
-          
-          case 'compound':
-            var compounds = []
-            var more = []
-            document.querySelectorAll('.rdWrdRelatedtags a').forEach(l => {
-              compounds.push(l.innerText);
-            });
-            document.querySelectorAll('.relatedWordContent .rdWordCard').forEach(e => {
-              var w = e.querySelector('h3').innerText;
-              var m = e.querySelector('.rdWrdCrdMeaning').innerText.trim();
-              var slug = e.id
-              more.push({ w, slug, m });
-            });
-            data = { compounds, more };
-            break;
 
-          case 'idiom':
-            var idiom = []
-            var more = []
-            document.querySelectorAll('.rdSimilarVocub .rdSmWordVocub').forEach(e => {
-              var w = e.querySelector('h4').innerText;
-              var m = e.querySelector('p').innerText.trim();
-              var slug = e.innerHTML.trim().match(/<a href="\/meaning-of-(.*?)\?/)[1];
-              more.push({ w, slug, m });
-            });
-            document.querySelectorAll('.relatedWordContent .rdWordCard').forEach(e => {
-              var w = e.querySelector('h3').innerText;
-              var m = e.querySelector('.rdWrdCrdMeaning').innerText.trim();
-              var slug = e.id
-              more.push({ w, slug, m });
-            });
-            data = { compounds, more };
-            break;
+        case 'compound':
+          var compounds = []
+          var more = []
+          document.querySelectorAll('.rdWrdRelatedtags a').forEach(l => {
+            var slug = l.outerHTML.trim().match(/<a href="\/meaning-of-(.*?)\?/)[1];
+            compounds.push({ "w": l.innerText, slug });
+          });
+          document.querySelectorAll('.relatedWordContent .rdWordCard').forEach(e => {
+            var w = e.querySelector('h3').innerText;
+            var m = e.querySelector('.rdWrdCrdMeaning').innerText.trim();
+            var slug = e.id
+            more.push({ w, slug, m });
+          });
+          data = { compounds, more };
+          break;
+
+        case 'idiom':
+          var idiom = []
+          var more = []
+          document.querySelectorAll('.rdSimilarVocub .rdSmWordVocub').forEach(e => {
+            var w = e.querySelector('h4').innerText;
+            var m = e.querySelector('p').innerText.trim();
+            var slug = e.innerHTML.trim().match(/<a href="\/meaning-of-(.*?)\?/)[1];
+            idiom.push({ w, slug, m });
+          });
+          document.querySelectorAll('.relatedWordContent .rdWordCard').forEach(e => {
+            var w = e.querySelector('h3').innerText;
+            var m = e.querySelector('.rdWrdCrdMeaning').innerText.trim();
+            var slug = e.id
+            more.push({ w, slug, m });
+          });
+          data = { compounds, more };
+          break;
+
+
+        case 'detail':
+          var arr = [];
+          var word = document.querySelector('.rdActiveWordBlock .rdWordDsplyFormat').innerHTML.replace(/[\r?\n ]+/g, ' ');;
+          var originAndWazn = document.querySelector('.rdActiveWordBlock .rdbasicWrdDetail').innerHTML.replace(/[\r?\n ]+/g, ' ');;
+          if(document.querySelector('.rdActiveWordBlock .rdSmediaIcons .rdWrdAudio a')) var audioId = document.querySelector('.rdActiveWordBlock .rdSmediaIcons .rdWrdAudio a').getAttribute('data-srcId');
+          if(audioId) var audio = 'https://www.rekhta.org/Images/SiteImages/DictionaryAudio/' + audioId + '.mp3';
+          document.querySelectorAll('.rdWordExpContainer .rdPartsofSpeechContainer').forEach(e => {
+            arr.push(e.innerHTML.replace(/[\r?\n ]+/g, ' ').trim());
+          });
+          data = { "basicInfo": { word, originAndWazn, audio }, "detailArr": arr };
+          break;
+
         default:
           data = 'Parameters are not proper. Check again!';
           break;
