@@ -52,33 +52,97 @@ app.get("/api/dic/:word", async (req, res, next) => {
     })
   }
 });
-app.get("/api/dic2/:word", async (req, res, next) => {
+app.get("/api/dic2/:method/:word&:lang&:id", async (req, res, next) => {
   try {
-    var baseurl = 'https://rekhtadictionary.com/search?keyword='
-    var word = req.params.word
-    console.log(word);
-    var url = encodeURI(baseurl + word +'&lang=ur');
-    const response = await fetch(url);
-    const text = await response.text();
-    var document = $.parse(text);
-    var el = document.querySelector('.rdSrchResultCrdListng');
+    var word = req.params.word;
+    var lang = req.params.lang;
+    var method = req.params.method;
+    var id = req.params.id;
+    var baseurl = '';
+    console.table({ word, lang, method, id });
+    switch (method) {
+      case 'briefMeaning':
+        baseurl = 'https://rekhtadictionary.com/search?keyword=';
+        break;
+
+      case 'compound':
+        baseurl = `https://rekhtadictionary.com/compound-words-containing-${id}?keyword=`;
+        break;
+      case 'getWords':
+        baseurl = 'https://rekhtadictionary.com/GetWordsSuggestions?q=';
+        break;
+      case 'idiom':
+        baseurl = `https://rekhtadictionary.com/idioms-containing-${id}?keyword=`;
+        break;
+
+      default:
+        baseurl = 'https://rekhtadictionary.com/search?keyword=';
+        break;
+    }
+    var url = encodeURI(baseurl + word + '&lang=' + lang);
     var msg;
     var data;
-    if (el == null) {
-      msg = "failed"
-      data = "لفظ نہیں ملا۔"
-    }
+    console.log(url);
+    const response = await fetch(url);
+    if (method == 'getWords') { console.log("Executing getWords"); var temp = await response.json(); data = JSON.stringify(temp); }
     else {
-      msg = "success";      
-      let meanings = []
-        el.querySelectorAll('.rdWordCard').forEach(e=>{
-          var w = e.querySelector('h3').innerText;
-          var m = e.querySelector('.rdWrdCrdMeaning').innerText;
-          meanings.push({w,m});
+      console.log("Executing else of getWords. Method:" + method);
+      const text = await response.text();
+      var document = $.parse(text);
+      msg = "success";
+      switch (method) {
+        case 'briefMeaning':
+          let meanings = []
+          var el = document.querySelector('.rdSrchResultCrdListng');
+          if (el == null) {
+            msg = "failed"
+            data = "لفظ نہیں ملا۔"
+          }
+          el.querySelectorAll('.rdWordCard').forEach(e => {
+            var w = e.querySelector('h3').innerText;
+            var m = e.querySelector('.rdWrdCrdMeaning').innerText.trim();
+            var slug = e.id
+            meanings.push({ w, slug, m });
           });
-      
-      console.log(meanings);
-      data = meanings;
+          data = meanings;
+          break;
+          
+          case 'compound':
+            var compounds = []
+            var more = []
+            document.querySelectorAll('.rdWrdRelatedtags a').forEach(l => {
+              compounds.push(l.innerText);
+            });
+            document.querySelectorAll('.relatedWordContent .rdWordCard').forEach(e => {
+              var w = e.querySelector('h3').innerText;
+              var m = e.querySelector('.rdWrdCrdMeaning').innerText.trim();
+              var slug = e.id
+              more.push({ w, slug, m });
+            });
+            data = { compounds, more };
+            break;
+
+          case 'idiom':
+            var idiom = []
+            var more = []
+            document.querySelectorAll('.rdSimilarVocub .rdSmWordVocub').forEach(e => {
+              var w = e.querySelector('h4').innerText;
+              var m = e.querySelector('p').innerText.trim();
+              var slug = e.innerHTML.trim().match(/<a href="\/meaning-of-(.*?)\?/)[1];
+              more.push({ w, slug, m });
+            });
+            document.querySelectorAll('.relatedWordContent .rdWordCard').forEach(e => {
+              var w = e.querySelector('h3').innerText;
+              var m = e.querySelector('.rdWrdCrdMeaning').innerText.trim();
+              var slug = e.id
+              more.push({ w, slug, m });
+            });
+            data = { compounds, more };
+            break;
+        default:
+          data = 'Parameters are not proper. Check again!';
+          break;
+      }
     }
     res.json({
       "message": msg,
@@ -86,26 +150,26 @@ app.get("/api/dic2/:word", async (req, res, next) => {
     })
   }
   catch (err) {
-    throw err;
     res.json({
       "message": "failed",
       "data": err
     })
+    throw err;
   }
 });
-app.get("/api/rekhta/:input", async(req, res, next) => {
+app.get("/api/rekhta/:input", async (req, res, next) => {
   try {
-    var input = req.params.input 
+    var input = req.params.input
     var url = decodeURIComponent(input)
     console.log(url);
     const response = await fetch(url);
     const text = await response.text();
     var document = $.parse(text);
     var _bookUrl = url;
-    var pageContents = document+''; //or document.head.innerHTML as scripts are only in <head>.
+    var pageContents = document + ''; //or document.head.innerHTML as scripts are only in <head>.
     var bookName = document.querySelector('span.c-book-name').innerText.trim();
     console.log(bookName);
-    var author = document.querySelector('span.faded').innerText.replace(/\r?\n/g,'').replace(/ +/g, ' ').replace('by ','').trim();
+    var author = document.querySelector('span.faded').innerText.replace(/\r?\n/g, '').replace(/ +/g, ' ').replace('by ', '').trim();
     var fileName = `${bookName} by ${author}`.trim().replace(/ +/g, ' ').replace(/ /g, '-');
     //var BookName = actualUrl.toLowerCase().replace("'/ebooks/", "").replace(/-ebooks'/g, '').trim().replace(/\//g, '-');
 
@@ -128,13 +192,13 @@ app.get("/api/rekhta/:input", async(req, res, next) => {
       keys.push(key);
       scrambleMap.push({ imgUrl, key });
     }
-    var data = { bookName, author, _pageCount, _bookUrl, fileName, _bookId, actualUrl, pages, pageIds, scrambleMap};
+    var data = { bookName, author, _pageCount, _bookUrl, fileName, _bookId, actualUrl, pages, pageIds, scrambleMap };
     res.json({
       "message": "success",
       data
     })
 
-    function FindTextBetween(source, start, end) {      
+    function FindTextBetween(source, start, end) {
       return source.split(start)[1].split(end)[0].trim();
     }
     function StringToStringArray(input) {
